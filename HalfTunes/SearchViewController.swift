@@ -202,6 +202,25 @@ extension SearchViewController: NSURLSessionDownloadDelegate {
             }
         }
     }
+    
+    func URLSession(session: NSURLSession, downloadTask: NSURLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        
+        // 1
+        if let downloadUrl = downloadTask.originalRequest?.URL?.absoluteString,
+            download = activeDownloads[downloadUrl] {
+            // 2
+            download.progress = Float(totalBytesWritten)/Float(totalBytesExpectedToWrite)
+            // 3
+            let totalSize = NSByteCountFormatter.stringFromByteCount(totalBytesExpectedToWrite, countStyle: NSByteCountFormatterCountStyle.Memory)
+            // 4
+            if let trackIndex = trackIndexForDownloadTask(downloadTask), let trackCell = tableView.cellForRowAtIndexPath(NSIndexPath(forRow: trackIndex, inSection: 0)) as? TrackCell {
+                dispatch_async(dispatch_get_main_queue(), {
+                    trackCell.progressView.progress = download.progress
+                    trackCell.progressLabel.text =  String(format: "%.1f%% of %@",  download.progress * 100, totalSize)
+                })
+            }
+        }
+    }
 }
 
 //LAL's Concept!!!
@@ -321,11 +340,23 @@ extension SearchViewController: UITableViewDataSource {
     // Configure title and artist labels
     cell.titleLabel.text = track.name
     cell.artistLabel.text = track.artist
-
+    
+    // Configure the download progress views
+    var showDownloadControls = false
+    if let download = activeDownloads[track.previewUrl!] {
+        showDownloadControls = true
+        
+        cell.progressView.progress = download.progress
+        cell.progressLabel.text = (download.isDownloading) ? "Downloading..." : "Paused"
+    }
+    cell.progressView.hidden = !showDownloadControls
+    cell.progressLabel.hidden = !showDownloadControls
+    
+    
     // If the track is already downloaded, enable cell selection and hide the Download button
     let downloaded = localFileExistsForTrack(track)
     cell.selectionStyle = downloaded ? UITableViewCellSelectionStyle.Gray : UITableViewCellSelectionStyle.None
-    cell.downloadButton.hidden = downloaded
+    cell.downloadButton.hidden = downloaded || showDownloadControls
     
     return cell
   }
