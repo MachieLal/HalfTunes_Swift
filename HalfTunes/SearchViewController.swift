@@ -9,18 +9,34 @@
 import UIKit
 import MediaPlayer
 
+let ITUNES_URL = "https://itunes.apple.com/search?media=music&entity=song&term="
+
 class SearchViewController: UIViewController {
 
   @IBOutlet weak var tableView: UITableView!
   @IBOutlet weak var searchBar: UISearchBar!
 
+    // 1
+  let defaultSession = NSURLSession(configuration: NSURLSessionConfiguration.defaultSessionConfiguration())
+    // 2
+  var dataTask: NSURLSessionDataTask?
+    
+    
   var searchResults = [Track]()
   
   lazy var tapRecognizer: UITapGestureRecognizer = {
-    var recognizer = UITapGestureRecognizer(target:self, action: "dismissKeyboard")
+    var recognizer = UITapGestureRecognizer(target:self, action: #selector(SearchViewController.dismissKeyboard))
     return recognizer
   }()
   
+  var activeDownloads = [String: Download]()
+
+//    lazy var downloadsSession: NSURLSession = {
+//        let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
+//        let session = NSURLSession(configuration: configuration, delegate: self , delegateQueue: nil)
+//        return session
+//    }()
+    
   // MARK: View controller methods
   
   override func viewDidLoad() {
@@ -77,9 +93,20 @@ class SearchViewController: UIViewController {
   // MARK: Download methods
   
   // Called when the Download button for a track is tapped
-  func startDownload(track: Track) {
-    // TODO
-  }
+    func startDownload(track: Track) {
+        if let urlString = track.previewUrl, url =  NSURL(string: urlString) {
+            // 1
+            let download = Download(url: urlString)
+            // 2
+            download.downloadTask = downloadsSession.downloadTaskWithURL(url)
+            // 3
+            download.downloadTask!.resume()
+            // 4
+            download.isDownloading = true
+            // 5
+            activeDownloads[download.url] = download
+        }
+    }
   
   // Called when the Pause button for a track is tapped
   func pauseDownload(track: Track) {
@@ -97,7 +124,7 @@ class SearchViewController: UIViewController {
   }
   
    // This method attempts to play the local file (if it exists) when the cell is tapped
-  func playDownload(track: Track) {
+  func playDownloaded(track: Track) {
     if let urlString = track.previewUrl, url = localFilePathForUrl(urlString) {
       let moviePlayer:MPMoviePlayerViewController! = MPMoviePlayerViewController(contentURL: url)
       presentMoviePlayerViewControllerAnimated(moviePlayer)
@@ -128,17 +155,104 @@ class SearchViewController: UIViewController {
     }
     return false
   }
+    
+    func trackIndexForDownloadTask(downloadTask: NSURLSessionDownloadTask) -> Int? {
+        if let url = downloadTask.originalRequest?.URL?.absoluteString {
+            for (index, track) in searchResults.enumerate() {
+                if url == track.previewUrl! {
+                    return index
+                }
+            }
+        }
+        return nil
+    }
+
+}
+
+extension SearchViewController: NSURLSessionDownloadDelegate {
+    func URLSession(session: NSURLSession, downloadTask: NSURLSessionDownloadTask, didFinishDownloadingToURL location: NSURL) {
+        // 1
+        if let originalURL = downloadTask.originalRequest?.URL?.absoluteString,
+            destinationURL = localFilePathForUrl(originalURL) {
+            
+            print(destinationURL)
+            
+            // 2
+            let fileManager = NSFileManager.defaultManager()
+            do {
+                try fileManager.removeItemAtURL(destinationURL)
+            } catch {
+                // Non-fatal: file probably doesn't exist
+            }
+            do {
+                try fileManager.copyItemAtURL(location, toURL: destinationURL)
+            } catch let error as NSError {
+                print("Could not copy file to disk: \(error.localizedDescription)")
+            }
+        }
+        
+        // 3
+        if let url = downloadTask.originalRequest?.URL?.absoluteString {
+            activeDownloads[url] = nil
+            // 4  UI Updation.
+            if let trackIndex = trackIndexForDownloadTask(downloadTask) {
+                dispatch_async(dispatch_get_main_queue(), {
+                    self.tableView.reloadRowsAtIndexPaths([NSIndexPath(forRow: trackIndex, inSection: 0)], withRowAnimation: .None)
+                })
+            }
+        }
+    }
+}
+
+//LAL's Concept!!!
+extension SearchViewController: NSURLSessionDelegate {
+    var downloadsSession: NSURLSession  {
+        get {
+            let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
+            let session = NSURLSession(configuration: configuration, delegate: self , delegateQueue: nil)
+            return session
+        }
+    }
 }
 
 // MARK: - UISearchBarDelegate
 
 extension SearchViewController: UISearchBarDelegate {
-  func searchBarSearchButtonClicked(searchBar: UISearchBar) {
-    // Dimiss the keyboard
-    dismissKeyboard()
-    
-    // TODO
-  }
+    func searchBarSearchButtonClicked(searchBar: UISearchBar) {
+        dismissKeyboard()
+        
+        if !searchBar.text!.isEmpty {
+            // 1
+            if dataTask != nil {
+                dataTask?.cancel()
+            }
+            // 2
+            UIApplication.sharedApplication().networkActivityIndicatorVisible = true
+            // 3
+            let expectedCharSet = NSCharacterSet.URLQueryAllowedCharacterSet()
+            let searchTerm = searchBar.text!.stringByAddingPercentEncodingWithAllowedCharacters(expectedCharSet)!
+            // 4
+            let url = NSURL(string: ITUNES_URL+"\(searchTerm)")
+            // 5
+            dataTask = defaultSession.dataTaskWithURL(url!) {
+                data, response, error in
+                // 6
+                dispatch_async(dispatch_get_main_queue()) {
+                    UIApplication.sharedApplication().networkActivityIndicatorVisible = false
+                }
+                // 7
+                if let error = error {
+                    print(error.localizedDescription)
+                } else if let httpResponse = response as? NSHTTPURLResponse {
+                    if httpResponse.statusCode == 200 {
+                        self.updateSearchResults(data)
+                    }
+                }
+            }
+            // 8
+            dataTask?.resume()
+        }
+    }
     
   func positionForBar(bar: UIBarPositioning) -> UIBarPosition {
     return .TopAttached
@@ -184,7 +298,7 @@ extension SearchViewController: TrackCellDelegate {
     if let indexPath = tableView.indexPathForCell(cell) {
       let track = searchResults[indexPath.row]
       startDownload(track)
-      tableView.reloadRowsAtIndexPaths([NSIndexPath(forRow: indexPath.row, inSection: 0)], withRowAnimation: .None)
+      tableView.reloadRowsAtIndexPaths([NSIndexPath(forRow: indexPath.row, inSection: 0)], withRowAnimation: .Right)
     }
   }
 }
@@ -227,7 +341,7 @@ extension SearchViewController: UITableViewDelegate {
   func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
     let track = searchResults[indexPath.row]
     if localFileExistsForTrack(track) {
-      playDownload(track)
+      playDownloaded(track)
     }
     tableView.deselectRowAtIndexPath(indexPath, animated: true)
   }
