@@ -109,19 +109,44 @@ class SearchViewController: UIViewController {
     }
   
   // Called when the Pause button for a track is tapped
-  func pauseDownload(track: Track) {
-    // TODO
-  }
+    func pauseDownload(track: Track) {
+        if let urlString = track.previewUrl,
+            download = activeDownloads[urlString] {
+            if(download.isDownloading) {
+                download.downloadTask?.cancelByProducingResumeData { data in
+                    if data != nil {
+                        download.resumeData = data
+                    }
+                }
+                download.isDownloading = false
+            }
+        }
+    }
   
   // Called when the Cancel button for a track is tapped
-  func cancelDownload(track: Track) {
-    // TODO
-  }
+    func cancelDownload(track: Track) {
+        if let urlString = track.previewUrl,
+            download = activeDownloads[urlString] {
+            download.downloadTask?.cancel()
+            activeDownloads[urlString] = nil
+        }
+    }
   
   // Called when the Resume button for a track is tapped
-  func resumeDownload(track: Track) {
-    // TODO
-  }
+    func resumeDownload(track: Track) {
+        if let urlString = track.previewUrl,
+            download = activeDownloads[urlString] {
+            if let resumeData = download.resumeData {
+                download.downloadTask = downloadsSession.downloadTaskWithResumeData(resumeData)
+                download.downloadTask!.resume()
+                download.isDownloading = true
+            } else if let url = NSURL(string: download.url) {
+                download.downloadTask = downloadsSession.downloadTaskWithURL(url)
+                download.downloadTask!.resume()
+                download.isDownloading = true
+            }
+        }
+    }
   
    // This method attempts to play the local file (if it exists) when the cell is tapped
   func playDownloaded(track: Track) {
@@ -348,6 +373,9 @@ extension SearchViewController: UITableViewDataSource {
         
         cell.progressView.progress = download.progress
         cell.progressLabel.text = (download.isDownloading) ? "Downloading..." : "Paused"
+        
+        let title = (download.isDownloading) ? "Pause" : "Resume"
+        cell.pauseButton.setTitle(title, forState: UIControlState.Normal)
     }
     cell.progressView.hidden = !showDownloadControls
     cell.progressLabel.hidden = !showDownloadControls
@@ -357,7 +385,8 @@ extension SearchViewController: UITableViewDataSource {
     let downloaded = localFileExistsForTrack(track)
     cell.selectionStyle = downloaded ? UITableViewCellSelectionStyle.Gray : UITableViewCellSelectionStyle.None
     cell.downloadButton.hidden = downloaded || showDownloadControls
-    
+    cell.pauseButton.hidden = !showDownloadControls
+    cell.cancelButton.hidden = !showDownloadControls
     return cell
   }
 }
