@@ -13,6 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   var window: UIWindow?
   let tintColor =  UIColor(red: 242/255, green: 71/255, blue: 63/255, alpha:0.1)
+  //var backgroundSessionCompletionHandler: (() -> Void)?
 
   func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
     // Override point for customization after application launch.
@@ -42,6 +43,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
   }
 
+//    ???????? I do not find any requirement of this method in this app. Tough ray bhai mentioned it.
+
+//    func application(application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: () -> Void) {
+//        backgroundSessionCompletionHandler = completionHandler
+//    }
+    
   // MARK - App Theme Customization
   
   private func customizeAppearance() {

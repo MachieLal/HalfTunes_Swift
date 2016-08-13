@@ -41,7 +41,8 @@ class SearchViewController: UIViewController {
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    tableView.tableFooterView = UIView()
+    tableView.tableFooterView = UIView() // Need of THis??????
+//    _ = self.downloadsSession //??????????
   }
   
   override func didReceiveMemoryWarning() {
@@ -248,15 +249,30 @@ extension SearchViewController: NSURLSessionDownloadDelegate {
     }
 }
 
+
 //LAL's Concept!!!
 extension SearchViewController: NSURLSessionDelegate {
     var downloadsSession: NSURLSession  {
         get {
-            let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
+            let configuration = NSURLSessionConfiguration.backgroundSessionConfigurationWithIdentifier("bgSessionConfiguration")
             let session = NSURLSession(configuration: configuration, delegate: self , delegateQueue: nil)
             return session
         }
     }
+    
+//    ???????? I do not find any requirement of this method in this app. Tough ray bhai mentioned it.
+    
+//    func URLSessionDidFinishEventsForBackgroundURLSession(session: NSURLSession) {
+//        if let appDelegate = UIApplication.sharedApplication().delegate as? AppDelegate {
+//            if let completionHandler = appDelegate.backgroundSessionCompletionHandler {
+//                appDelegate.backgroundSessionCompletionHandler = nil
+//                dispatch_async(dispatch_get_main_queue(), {
+//                    completionHandler()
+//                })
+//            }
+//        }
+//    }
+    
 }
 
 // MARK: - UISearchBarDelegate
